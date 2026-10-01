@@ -25,7 +25,7 @@ docker compose down
 | 构建 | Vite 6（`npm run build` 含 `vue-tsc --noEmit` 类型检查） |
 | UI | Element Plus 2 |
 | 路由 | Vue Router 4（5 条业务路由 + 404） |
-| 状态 | Pinia（ringStore / measureStore / siteStore / sessionStore） |
+| 状态 | Pinia（ringStore / measureStore / siteStore / sessionStore / sightingStore） |
 | 地图 | 高德地图 JS API（可选，按需动态加载）+ 本地 SVG 网格退化视图 |
 | 存储 | IndexedDB（Dexie，库名 `gbbirdring-db`） |
 | 托管 | nginx:alpine（多阶段构建，SPA try_files + gzip） |
@@ -55,13 +55,13 @@ npm run build    # 类型检查 + 生产构建
 │   ├── nginx.conf             # try_files SPA 回退 + gzip
 │   ├── public/favicon.svg
 │   └── src/
-│       ├── types/             # ring-record / morphometrics / bird-site / session（+ ui.ts）
-│       ├── stores/            # ringStore / measureStore / siteStore / sessionStore
+│       ├── types/             # ring-record / morphometrics / bird-site / session / patrol-sighting（+ ui.ts）
+│       ├── stores/            # ringStore / measureStore / siteStore / sessionStore / sightingStore
 │       ├── components/common/ # SiteMap / MeasureInput / RingCodeInput / SpeciesPicker / StatBadge / FilterBar / EmptyPanel
 │       ├── hooks/             # useSiteFilter / useAmap
-│       ├── pages/             # RingBoard / RingList / MeasureEntry / SiteList / SessionList
+│       ├── pages/             # RingBoard / RingList / MeasureEntry / SiteList / SessionList / SightingList
 │       ├── router/index.ts    # 路由表
-│       └── utils/             # stats.ts / geo.ts / db.ts / export.ts（+ seed.ts / id.ts / plain.ts / format.ts）
+│       └── utils/             # stats / geo / db / export（+ seed / id / plain / format / birds）
 ```
 
 ## 功能与路由
@@ -70,13 +70,15 @@ npm run build    # 类型检查 + 生产构建
 | --- | --- | --- |
 | `/` | 统计台 | 鸟种数、初捕/重捕比、鸟点分布图、鸟种计数与生境分布 |
 | `/rings` | 环志记录 | 金属环号 + 彩环双段录入与自动查重，重复时提示并跳转历史记录 |
+| `/sightings` | 巡护目击对账 | 巡护侧随手记的彩环目击与站里环志档案按彩环组合对账：对上一只鸟即挂到该鸟名下，捕获经历与鸟点分布跟着算；对上多只或档案没有的留在待认领；核对失败两边都保住，重试只补没挂上的，挂错可撤回 |
 | `/measure` | 量度测量 | 6 项量度带单位与范围校验，与同鸟种历史均值比对给出偏离提示 |
 | `/sites` | 鸟点台账 | 地图 / SVG 网格双模式切换，表单拾取坐标即时落点，点位间距提示 |
 | `/sessions` | 调查批次 | 观测条件录入，关闭批次后统计鸟种数、初捕数与重捕数 |
 
 ## 数据存储说明
 
-- 全部数据存于浏览器 IndexedDB（Dexie，库名 `gbbirdring-db`），表：`rings`、`morphs`、`sites`、`sessions`、`meta`。
-- `db.version(1)` 建表声明索引；`db.version(2).upgrade(...)` 为环志表增加 `[speciesCn+ringDate]` 复合索引并回填历史彩环字段。升级前可用顶栏「导出备份」导出全量 JSON。
-- 首次打开且表为空时写入示例数据（6 个鸟点、4 个调查批次、18 条环志记录与 14 条量度）。
+- 全部数据存于浏览器 IndexedDB（Dexie，库名 `gbbirdring-db`），表：`rings`、`morphs`、`sites`、`sessions`、`sightings`、`meta`。
+- `db.version(1)` 建表声明索引；`db.version(2).upgrade(...)` 为环志表增加 `[speciesCn+ringDate]` 复合索引并回填历史彩环字段；`db.version(3)` 新增巡护目击表 `sightings`（`id, colorKey, claimStatus, sightingDate, siteId, linkedRingNo`），与环志档案各留一份、按彩环组合对账。升级前可用顶栏「导出备份」导出全量 JSON。
+- 巡护目击对账规则：彩环写法（顺序 / 分隔符号）归一为颜色密钥后，与按金属环号归并的鸟组比对——恰好对上一只鸟则挂接（`claimStatus=linked`，记录 `linkedRingNo`），对上多只或档案中没有则留在待认领（`claimStatus=pending`，并记 `pendingReason`）。对账不删改任何一方数据；重试只处理待认领目击；撤回挂接后目击回到待认领、环志档案不动。
+- 首次打开且表为空时写入示例数据（6 个鸟点、4 个调查批次、18 条环志记录、14 条量度与 6 条巡护目击）。
 - 容器无状态：不使用数据库服务、不挂载命名卷，`docker compose down` 后数据仍留在浏览器中。

@@ -3,6 +3,8 @@ import type { BirdSite } from '../types/bird-site';
 import type { SurveySession } from '../types/session';
 import type { RingRecord } from '../types/ring-record';
 import type { Morphometrics } from '../types/morphometrics';
+import type { PatrolSighting } from '../types/patrol-sighting';
+import { normalizeColorRing } from '../types/patrol-sighting';
 import { SPECIES_CATALOG } from './stats';
 
 const DAY = 86_400_000;
@@ -125,24 +127,65 @@ export const SEED_MORPHS: Morphometrics[] = [
   morph(14, 'ring-016', 12.6, 3.9, 78.2, 62.4, 22.0, 16.8, 2, '郑海', 2),
 ];
 
+/** 巡护目击种子数据：前 5 条彩环组合在站里档案中各对上一只鸟（已挂接），末 1 条档案中无此组合（待认领） */
+function sighting(
+  index: number,
+  colorRing: string,
+  days: number,
+  siteId: string,
+  observer: string,
+  claimStatus: PatrolSighting['claimStatus'],
+  linkedRingNo?: string,
+  linkedRingId?: string,
+  pendingReason?: PatrolSighting['pendingReason'],
+  remark?: string,
+): PatrolSighting {
+  return {
+    id: `sighting-${String(index).padStart(3, '0')}`,
+    colorRing,
+    colorKey: normalizeColorRing(colorRing),
+    sightingDate: isoDaysAgo(days),
+    siteId,
+    observer,
+    remark,
+    claimStatus,
+    linkedRingNo,
+    linkedRingId,
+    pendingReason,
+    reconciledAt: isoDaysAgo(days),
+    createdAt: isoDaysAgo(days),
+  };
+}
+
+export const SEED_SIGHTINGS: PatrolSighting[] = [
+  sighting(1, '红-黄', 1, 'site-006', '马晓', 'linked', 'A-10231', 'ring-014', undefined, '南岸芦苇荡浅水区，隔水面望见彩环'),
+  sighting(2, '蓝-白', 3, 'site-002', '马晓', 'linked', 'A-10233', 'ring-003'),
+  sighting(3, '绿-橙', 5, 'site-001', '顾芳', 'linked', 'A-10101', 'ring-005', undefined, '同一网阵附近再次出现'),
+  sighting(4, '黄-蓝-白', 6, 'site-002', '顾芳', 'linked', 'A-10242', 'ring-007'),
+  sighting(5, '黑-红', 8, 'site-003', '马晓', 'linked', 'B-20512', 'ring-010'),
+  sighting(6, '红-红', 4, 'site-006', '顾芳', 'pending', undefined, undefined, 'none', '两只红环，档案中无此组合，待认领'),
+];
+
 /** 首次打开（表内无数据）时写入示例数据；已有数据则不动 */
 export async function seedIfEmpty(): Promise<void> {
   const flag = await db.meta.get('seeded');
   if (flag) {
     return;
   }
-  const [ringCount, morphCount, siteCount, sessionCount] = await Promise.all([
+  const [ringCount, morphCount, siteCount, sessionCount, sightingCount] = await Promise.all([
     db.rings.count(),
     db.morphs.count(),
     db.sites.count(),
     db.sessions.count(),
+    db.sightings.count(),
   ]);
 
-  await db.transaction('rw', db.rings, db.morphs, db.sites, db.sessions, db.meta, async () => {
+  await db.transaction('rw', [db.rings, db.morphs, db.sites, db.sessions, db.sightings, db.meta], async () => {
     if (siteCount === 0) await db.sites.bulkPut(SEED_SITES);
     if (sessionCount === 0) await db.sessions.bulkPut(SEED_SESSIONS);
     if (ringCount === 0) await db.rings.bulkPut(SEED_RINGS);
     if (morphCount === 0) await db.morphs.bulkPut(SEED_MORPHS);
+    if (sightingCount === 0) await db.sightings.bulkPut(SEED_SIGHTINGS);
     await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
   });
 }
