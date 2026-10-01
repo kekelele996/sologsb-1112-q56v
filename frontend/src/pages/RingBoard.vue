@@ -9,6 +9,7 @@ import { useRingStore } from '../stores/ringStore';
 import { useSiteStore } from '../stores/siteStore';
 import { useMeasureStore } from '../stores/measureStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { useSightingStore } from '../stores/sightingStore';
 import { HABITATS, type BirdSite } from '../types/bird-site';
 import { recaptureRate, speciesCount, statusBreakdown } from '../utils/stats';
 import { sitesByHabitat } from '../utils/geo';
@@ -18,6 +19,7 @@ const ringStore = useRingStore();
 const siteStore = useSiteStore();
 const measureStore = useMeasureStore();
 const sessionStore = useSessionStore();
+const sightingStore = useSightingStore();
 const filter = useSiteFilter();
 
 const visibleSites = computed(() => filter.apply(siteStore.sites, sessionStore.sessions));
@@ -104,6 +106,20 @@ function selectSite(siteId: string) {
         <el-card shadow="never" class="block">
           <template #header>
             <div class="card-head">
+              <span>秋迁巡护对账</span>
+              <el-button link type="primary" @click="router.push('/patrol')">去对账</el-button>
+            </div>
+          </template>
+          <div class="patrol-row">
+            <el-tag size="small" type="warning" effect="plain">待认领 {{ sightingStore.unclaimed.length }}</el-tag>
+            <el-tag size="small" type="success" effect="plain">已认领 {{ sightingStore.claimed.length }}</el-tag>
+            <span class="card-note">共 {{ sightingStore.sightings.length }} 条目击</span>
+          </div>
+        </el-card>
+
+        <el-card shadow="never" class="block">
+          <template #header>
+            <div class="card-head">
               <span>最近环志</span>
               <span class="card-note">已量度 {{ measureStore.measuredRingCount }} 只</span>
             </div>
@@ -159,6 +175,12 @@ function selectSite(siteId: string) {
   font-size: 13px;
   padding: 4px 0;
   color: #2f4a44;
+}
+.patrol-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .recent-row {
   display: flex;

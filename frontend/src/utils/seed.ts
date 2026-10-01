@@ -3,6 +3,8 @@ import type { BirdSite } from '../types/bird-site';
 import type { SurveySession } from '../types/session';
 import type { RingRecord } from '../types/ring-record';
 import type { Morphometrics } from '../types/morphometrics';
+import type { Sighting } from '../types/sighting';
+import { applyOutcome, reconcileSighting } from './reconcile';
 import { SPECIES_CATALOG } from './stats';
 
 const DAY = 86_400_000;
@@ -78,6 +80,9 @@ export const SEED_RINGS: RingRecord[] = [
   ring(16, 'C-30102', '无', '北红尾鸲', '成', 'session-004', 'site-001', '5 号网', 2, '初捕', '郑海', 2),
   ring(17, 'A-10099', '无', '红喉歌鸲', '成', 'session-004', 'site-001', '3 号网', 3, '回收', '郑海', 2, '回收自外站环志个体'),
   ring(18, 'C-30103', '无', '黄鹡鸰', '幼', 'session-004', 'site-001', '6 号网', 4, '初捕', '韩雪', 2),
+  // 与 ring-003 同为「蓝-白」彩环组合：巡护目击只看彩环时会命中两只鸟，对账须留待认领
+  ring(19, 'D-40207', '蓝-白', '红胁蓝尾鸲', '亚成', 'session-003', 'site-003', '6 号网', 4, '初捕', '郑海', 7),
+  ring(20, 'B-20516', '绿-橙', '北红尾鸲', '成', 'session-003', 'site-006', '2 号网', 3, '初捕', '韩雪', 7, '黄河口南岸环志'),
 ];
 
 function morph(
@@ -125,24 +130,65 @@ export const SEED_MORPHS: Morphometrics[] = [
   morph(14, 'ring-016', 12.6, 3.9, 78.2, 62.4, 22.0, 16.8, 2, '郑海', 2),
 ];
 
+function sighting(
+  index: number,
+  colorRing: string,
+  siteId: string,
+  observer: string,
+  days: number,
+  rawText: string,
+  note?: string,
+): Sighting {
+  return {
+    id: `sight-${String(index).padStart(3, '0')}`,
+    colorRing,
+    sightedAt: isoDaysAgo(days),
+    siteId,
+    observer,
+    rawText,
+    note,
+    // 新目击先全部待认领，由 seedIfEmpty 用与页面一致的对账逻辑预跑一遍
+    status: '待认领',
+    reason: '未核对',
+  };
+}
+
+export const SEED_SIGHTINGS: Sighting[] = [
+  sighting(1, '红-黄', 'site-006', '林舟', 3, '左→右：○红 ▭黄', '退水后浅滩觅食，隔水面约 80m'),
+  sighting(2, '黄-蓝-白', 'site-002', '林舟', 3, '黄／蓝／白', '高潮线附近，与一群白腰杓鹬混群'),
+  sighting(3, '黑-红', 'site-003', '苏岩', 2, '黑-红', '林缘灌丛，鸣唱'),
+  sighting(4, '绿-橙', 'site-001', '苏岩', 1, '绿、橙', '芦苇荡边缘'),
+  sighting(5, '蓝-白', 'site-006', '林舟', 1, '蓝 白', '彩环组合与多只档案鸟重合，需核金属环'),
+  sighting(6, '紫-金', 'site-002', '苏岩', 1, '紫-金', '翻遍环志档案未见此组合，疑为外站鸟'),
+  sighting(7, '红-黄', 'site-001', '林舟', 0, '红·黄', '与三天前南岸目击疑为同一只'),
+];
+
 /** 首次打开（表内无数据）时写入示例数据；已有数据则不动 */
 export async function seedIfEmpty(): Promise<void> {
   const flag = await db.meta.get('seeded');
   if (flag) {
     return;
   }
-  const [ringCount, morphCount, siteCount, sessionCount] = await Promise.all([
+  const [ringCount, morphCount, siteCount, sessionCount, sightingCount] = await Promise.all([
     db.rings.count(),
     db.morphs.count(),
     db.sites.count(),
     db.sessions.count(),
+    db.sightings.count(),
   ]);
 
-  await db.transaction('rw', db.rings, db.morphs, db.sites, db.sessions, db.meta, async () => {
+  await db.transaction('rw', [db.rings, db.morphs, db.sites, db.sessions, db.sightings, db.meta], async () => {
     if (siteCount === 0) await db.sites.bulkPut(SEED_SITES);
     if (sessionCount === 0) await db.sessions.bulkPut(SEED_SESSIONS);
     if (ringCount === 0) await db.rings.bulkPut(SEED_RINGS);
     if (morphCount === 0) await db.morphs.bulkPut(SEED_MORPHS);
+    if (sightingCount === 0) {
+      // 巡护目击与环志档案各留一份，先按与页面一致的规则预跑一轮对账
+      const rings = await db.rings.toArray();
+      const at = new Date().toISOString();
+      const reconciled = SEED_SIGHTINGS.map((item) => applyOutcome(item, reconcileSighting(item, rings), at));
+      await db.sightings.bulkPut(reconciled);
+    }
     await db.meta.put({ key: 'seeded', value: new Date().toISOString() });
   });
 }

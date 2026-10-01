@@ -9,6 +9,7 @@ import { useRingStore } from './stores/ringStore';
 import { useMeasureStore } from './stores/measureStore';
 import { useSiteStore } from './stores/siteStore';
 import { useSessionStore } from './stores/sessionStore';
+import { useSightingStore } from './stores/sightingStore';
 import { useAmap } from './hooks/useAmap';
 
 const route = useRoute();
@@ -16,6 +17,7 @@ const ringStore = useRingStore();
 const measureStore = useMeasureStore();
 const siteStore = useSiteStore();
 const sessionStore = useSessionStore();
+const sightingStore = useSightingStore();
 const amap = useAmap();
 const ready = ref(false);
 
@@ -28,7 +30,13 @@ onMounted(async () => {
   }
   try {
     await seedIfEmpty();
-    await Promise.all([ringStore.hydrate(), measureStore.hydrate(), siteStore.hydrate(), sessionStore.hydrate()]);
+    await Promise.all([
+      ringStore.hydrate(),
+      measureStore.hydrate(),
+      siteStore.hydrate(),
+      sessionStore.hydrate(),
+      sightingStore.hydrate(),
+    ]);
   } catch (error) {
     ElMessage.error(`本地数据装载失败：${(error as Error).message}`);
   } finally {
@@ -53,6 +61,16 @@ async function handleExport() {
       <el-menu :default-active="route.path" router class="app-menu" background-color="#1f5b52" text-color="#e8f3ef" active-text-color="#ffd591">
         <el-menu-item index="/">统计台</el-menu-item>
         <el-menu-item index="/rings">环志记录</el-menu-item>
+        <el-menu-item index="/patrol">
+          巡护对账
+          <el-badge
+            v-if="sightingStore.unclaimed.length > 0"
+            :value="sightingStore.unclaimed.length"
+            :max="99"
+            class="menu-badge"
+            type="warning"
+          />
+        </el-menu-item>
         <el-menu-item index="/measure">量度测量</el-menu-item>
         <el-menu-item index="/sites">鸟点台账</el-menu-item>
         <el-menu-item index="/sessions">调查批次</el-menu-item>
@@ -97,6 +115,12 @@ async function handleExport() {
 }
 .app-menu {
   border-right: none;
+}
+.menu-badge {
+  margin-left: 6px;
+}
+.menu-badge :deep(.el-badge__content) {
+  transform: translateY(-2px) translateX(100%);
 }
 .app-header {
   background: #fff;
